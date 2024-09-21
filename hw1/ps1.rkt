@@ -3,6 +3,7 @@
 (provide (struct-out plus-node) (struct-out times-node) (struct-out int-leaf))
 (provide palindrome-list eval-tree check-bt ml-split piles-insert)
 
+
 ; For each problem, you can find additional test cases and examples by looking in ps1-test.rkt.
 ; The general format of each test is of the form
 ;
@@ -34,6 +35,7 @@
 ; Example: when s is "The gig was a gag, a joke.", (palindrome-list s) should return
 ; '("gig" "a" "gag" "a").
 
+
 (define (alphanumeric-or-space? ch)
   (or (char-alphabetic? ch)
       (char-numeric? ch)
@@ -50,6 +52,7 @@
   (let ((cleaned (remove-punctuation (string-downcase s))))
     (let ((words (string-split cleaned)))
       (filter check-palindrome-string words))))
+
 
 ;;;;;;;;; Problem 2 ;;;;;;;;;
 
@@ -101,6 +104,7 @@
 ; Example: (check-bt (bt-node 5 (bt-leaf 1) (bt-leaf 6))) should return #t,
 ; but (check-bt (bt-node 5 (bt-leaf 6) (bt-leaf 6))) should return #f.
 
+
 (struct bt-node (val left right))
 (struct bt-leaf (val))
 (struct bt-empty ())
@@ -116,6 +120,7 @@
             (check-sub-bt (bt-node-left t) min (bt-node-val t))
             (check-sub-bt (bt-node-right t) (bt-node-val t) max))]))
   (check-sub-bt t -inf.0 +inf.0))
+
 
 ;;;;;;;;; Problem 4 ;;;;;;;;;;;;
 
@@ -140,7 +145,22 @@
 ; 1)) would be wrong because we should prefer to make the first list
 ; larger at the expense of making the second list shorter.
 
-(define (ml-split l) '())
+
+(define (ml-split l)
+  (define (ml-split-helper l current-l result direction)
+    (cond
+      [(empty? l) (reverse (cons(reverse current-l) result))]
+      [(empty? current-l) (ml-split-helper (rest l) (list (first l)) result direction)]
+      [(= direction 0) 
+        (let ((updated-direction (if (> (first l) (first current-l)) 1 -1)))
+         (ml-split-helper (rest l) (cons (first l) current-l) result updated-direction))]
+      [(and (= direction 1) (> (first l) (first current-l)))
+        (ml-split-helper (rest l) (cons (first l) current-l) result direction)]
+      [(and (= direction -1) (< (first l) (first current-l)))
+        (ml-split-helper (rest l) (cons (first l) current-l) result direction)]
+      [else (ml-split-helper (rest l) (list (first l)) (cons (reverse current-l) result) 0)]))
+  (ml-split-helper l '() '() 0))
+
 
 ;;;;;;;;; Problem 5 ;;;;;;;;;;;;
 
@@ -160,4 +180,9 @@
 ; Example: (piles-insert '((4) (5)) 3) should return '((3 4) (5))) and
 ; (piles-insert '((2) (6)) 4) should return '((2) (4 6)))
 
-(define (piles-insert ls n) '())
+
+(define (piles-insert ls n)
+  (cond
+    [(empty? ls) (list (list n))]
+    [(>= (first (first ls)) n) (cons (cons n (first ls)) (rest ls))]
+    [else (cons (first ls) (piles-insert (rest ls) n))]))

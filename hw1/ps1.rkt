@@ -149,16 +149,19 @@
 (define (ml-split l)
   (define (ml-split-helper l current-l result direction)
     (cond
-      [(empty? l) (reverse (cons(reverse current-l) result))]
-      [(empty? current-l) (ml-split-helper (rest l) (list (first l)) result direction)]
+      [(empty? l) 
+      (reverse (cons(reverse current-l) result))]
+      [(empty? current-l)
+      (ml-split-helper (rest l) (list (first l)) result direction)]
       [(= direction 0) 
         (let ((updated-direction (if (> (first l) (first current-l)) 1 -1)))
-         (ml-split-helper (rest l) (cons (first l) current-l) result updated-direction))]
+         (ml-split-helper l current-l result updated-direction))]
       [(and (= direction 1) (> (first l) (first current-l)))
         (ml-split-helper (rest l) (cons (first l) current-l) result direction)]
       [(and (= direction -1) (< (first l) (first current-l)))
         (ml-split-helper (rest l) (cons (first l) current-l) result direction)]
-      [else (ml-split-helper (rest l) (list (first l)) (cons (reverse current-l) result) 0)]))
+      [else 
+      (ml-split-helper (rest l) (list (first l)) (cons (reverse current-l) result) 0)]))
   (ml-split-helper l '() '() 0))
 
 

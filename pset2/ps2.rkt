@@ -13,6 +13,22 @@
 ;; See ps2-ast.rkt and README.md for more information.
 
 
+(define-type Binding
+  [bind (name : symbol) (val : Value)])
+
+(define-type-alias Env (listof Binding))
+(define empty-env empty)
+(define extend-env cons)
+
+(define (lookup (x : symbol) (env : Env)) : Value
+  (cond
+    [(cons? env)
+     (if (equal? (bind-name (first env)) x)
+         (bind-val (first env))
+         (lookup x (rest env)))]
+    [else (error 'lookup "No binding found.")]))
+
+
 (define (parse (s : s-expression)) : Expr
   (cond
     [(s-exp-number? s) (valC (numV (s-exp->number s)))]
@@ -96,19 +112,117 @@
        )
      )]
 
-    ;; Default case for variables (identifiers)
+    ;; Default case for variables
     [else (idC (s-exp->symbol s))]
   )
 )
 
 
-;;; (define (eval (e : Expr)) : Value
-;;; (type-case Expr e
-;;;             [valC (v) v]
-;;;             [plusC (e1 e2) (numV (+ (numV->number (eval e1)) (numV->number (eval e2))))]
-;;;             [timesC (e1 e2) (numV (* (numV->number (eval e1)) (numV->number (eval e2))))]
-;;;             [equal?C (e1 e2) (boolV (equal? (eval e1) (eval e2)))]
-;;;             [ifC (guard e1 e2) (if (boolV->boolean (eval guard)) (eval e1) (eval e2))]
-;;;             [listC (es) (listV (map eval es))]
-;;; )
-;;; )   
+(define (eval-env (e : Expr) (env : Env)) : Value
+  (type-case Expr e
+    ;; Handle value case
+    [valC (v) v]
+
+    ;; Handle addition
+    [plusC (e1 e2)
+           (numV (+ (numV-n (eval-env e1 env)) (numV-n (eval-env e2 env))))]
+
+    ;; Handle multiplication
+    [timesC (e1 e2)
+            (numV (* (numV-n (eval-env e1 env)) (numV-n (eval-env e2 env))))]
+
+    ;; Handle equality check
+    [equal?C (e1 e2)
+             (boolV (equal? (eval-env e1 env) (eval-env e2 env)))]
+
+    ;; Handle if expression
+    [ifC (guard e1 e2)
+         (if (boolV-b (eval-env guard env))
+             (eval-env e1 env)
+             (eval-env e2 env))]
+
+    ;; Handle list creation
+    [listC (es)
+           (listV (map (lambda (e) (eval-env e env)) es))]
+
+    ;; Handle cons
+    [consC (e1 e2)
+           (let ([v1 (eval-env e1 env)]
+                 [v2 (listV-vs (eval-env e2 env))])
+             (listV (cons v1 v2)))]
+
+    ;; Handle first
+    [firstC (e)
+            (first (listV-vs (eval-env e env)))]
+
+    ;; Handle rest
+    [restC (e)(listV (rest (listV-vs (eval-env e env))))]
+
+    ;; Handle natrec
+    [natrecC (e1 e2 x y e3)
+             (let ([n (numV-n (eval-env e1 env))])
+               (if (zero? n)
+                   (eval-env e2 env)
+                   (let ([v (eval-env (natrecC (valC (numV (- n 1))) e2 x y e3) env)])
+                      (eval-env (letC (list (pair x (valC (numV (- n 1))))
+                                            (pair y (valC v)))
+                                        e3) env))))]
+
+    ;; Handle listrec
+    [listrecC (e1 e2 hd restS res e3)
+     (let ([v (listV-vs (eval-env e1 env))])
+       (if (empty? v)
+           (eval-env e2 env)
+           (let ([vrec (eval-env (listrecC (valC (listV (rest v))) e2 hd restS res e3) env)])
+             (eval-env (letC (list (pair hd (valC (first v)))
+                                   (pair restS (valC (listV (rest v))))
+                                   (pair res (valC vrec)))
+                              e3) env))))]
+
+    ;; Handle let
+    [letC (bindings e)
+          (let ([new-env (foldl (lambda (binding env)
+                                  (let ([var (fst binding)]
+                                        [value (eval-env (snd binding) env)])
+                                    (extend-env (bind var value) env)))
+                                env
+                                bindings)])
+            (eval-env e new-env))]
+
+    ;; Handle let*
+    [let*C (bindings e)
+          (let ([new-env (foldl (lambda (binding env)
+                                  (let ([var (fst binding)]
+                                        [value (eval-env (snd binding) env)])
+                                    (extend-env (bind var value) env)))
+                                env
+                                bindings)])
+            (eval-env e new-env))]
+
+
+    ;; Handle unpack
+    ; (unpack (x1 x2 ... xn) e1 e2)
+    ; would be parsed as (unpackC (list x1 x2 ... xn) e1 e2)
+    ; Evaluates e1, which can be assumed to yield a list l of the form (v1 v2 ... vn)
+    ; Then returns the result of evaluating e2 with x1 bound to v1, x2 bound to v2, ..., xn bound to vn.
+    ; It is assumed that the list l has the same length as the length of the 'vars' argument.
+    [unpackC (vars e1 e2)
+        (let ([l (listV-vs (eval-env e1 env))])
+          (eval-env e2 (foldl (lambda (binding env)
+                                (let ([var (fst binding)]
+                                      [value (snd binding)])
+                                  (extend-env (bind var value) env))) env list 
+
+    ;; Handle variable identifiers
+    [idC (x) (lookup x env)]
+ )
+  )
+
+
+
+(define (eval (e : Expr)) : Value
+  (eval-env e empty-env))
+
+(define l '(let ((x 5)) (let ((x (* x 2)) (y x)) (+ x y))))
+(define ll (parse l))
+(define evaluated (eval ll))

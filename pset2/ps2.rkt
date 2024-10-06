@@ -201,23 +201,15 @@
              (eval-env e new-env))]
 
     ;; Handle unpack
-    ; (unpack (x1 x2 ... xn) e1 e2)
-    ; would be parsed as (unpackC (list x1 x2 ... xn) e1 e2)
-    ; Evaluates e1, which can be assumed to yield a list l of the form (v1 v2 ... vn)
-    ; Then returns the result of evaluating e2 with x1 bound to v1, x2 bound to v2, ..., xn bound to vn.
-    ; It is assumed that the list l has the same length as the length of the 'vars' argument.
-    ;; Handle unpack
-    [unpackC (vars e1 e2) (numV 0)]
-
-
-
-
+    [unpackC (vars e1 e2)
+             (let ([l (listV-vs (eval-env e1 env))])
+               (let ([new-env (create-new-env l (map (lambda (var) (pair var (valC (first l)))) vars) env)])
+                 (eval-env e2 new-env)))]
 
     ;; Handle variable identifiers
     [idC (x) (lookup x env)]
     )
   )
-
 
 
 (define (eval (e : Expr)) : Value

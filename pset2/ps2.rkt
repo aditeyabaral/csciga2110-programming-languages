@@ -28,6 +28,11 @@
          (lookup x (rest env)))]
     [else (error 'lookup "No binding found.")]))
 
+(define (create-new-env (values : (listof Value)) (bindings : (listof (symbol * Expr))) (env : Env)) : Env
+  (cond
+    [(empty? values) env]
+    [else (extend-env (bind (fst (first bindings)) (first values) env)
+                      (create-new-env (rest values) (rest bindings) env))]))
 
 (define (parse (s : s-expression)) : Expr
   (cond
@@ -181,12 +186,8 @@
 
     ;; Handle let
     [letC (bindings e)
-          (let ([new-env (foldl (lambda (binding env)
-                                  (let ([var (fst binding)]
-                                        [value (eval-env (snd binding) env)])
-                                    (extend-env (bind var value env) env)))
-                                env
-                                bindings)])
+          (let* ([values (map (lambda (binding) (eval-env (snd binding) env)) bindings)]
+                [new-env (create-new-env values bindings env)])
             (eval-env e new-env))]
 
     ;; Handle let*
@@ -199,7 +200,6 @@
                                 bindings)])
             (eval-env e new-env))]
 
-
     ;; Handle unpack
     ; (unpack (x1 x2 ... xn) e1 e2)
     ; would be parsed as (unpackC (list x1 x2 ... xn) e1 e2)
@@ -208,7 +208,6 @@
     ; It is assumed that the list l has the same length as the length of the 'vars' argument.
     ;; Handle unpack
     [unpackC (vars e1 e2) (numV 0)]
-
 
     ;; Handle variable identifiers
     [idC (x) (lookup x env)]
@@ -220,6 +219,3 @@
 (define (eval (e : Expr)) : Value
   (eval-env e empty-env))
 
-(define l '(let ((x 5)) (let ((x (* x 2)) (y x)) (+ x y))))
-(define ll (parse l))
-(define evaluated (eval ll))

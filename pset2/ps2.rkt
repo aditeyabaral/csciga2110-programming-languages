@@ -71,20 +71,20 @@
              [(rest) (restC (parse (second l)))]
 
              ;; (natrec e1 e2 (x y e3))
-             [(natrec) 
-              (natrecC (parse (second l)) 
-                       (parse (third l)) 
+             [(natrec)
+              (natrecC (parse (second l))
+                       (parse (third l))
                        (s-exp->symbol (first (s-exp->list (fourth l))))
                        (s-exp->symbol (second (s-exp->list (fourth l))))
                        (parse (third (s-exp->list(fourth l)))))]
 
              ;; (listrec e1 e2 (hd rest res e3))
-             [(listrec) 
-              (listrecC (parse (second l)) 
-                        (parse (third l)) 
+             [(listrec)
+              (listrecC (parse (second l))
+                        (parse (third l))
                         (s-exp->symbol (first (s-exp->list (fourth l))))
                         (s-exp->symbol (second (s-exp->list (fourth l))))
-                        (s-exp->symbol (third (s-exp->list (fourth l)))) 
+                        (s-exp->symbol (third (s-exp->list (fourth l))))
                         (parse (fourth (s-exp->list(fourth l)))))]
 
              ;; (let ([x1 e1] [x2 e2] ... [xn en]) e)
@@ -94,13 +94,13 @@
                       (pair (s-exp->symbol (first (s-exp->list binding)))
                             (parse (second (s-exp->list binding)))))
                     (s-exp->list (second l)))
-                    (parse (third l)))]
+               (parse (third l)))]
 
              ;; (let* ([x1 e1] [x2 e2] ... [xn en]) e)
-             [(let*) 
+             [(let*)
               (let*C
                (map (lambda (binding)
-                      (pair (s-exp->symbol (first (s-exp->list binding))) 
+                      (pair (s-exp->symbol (first (s-exp->list binding)))
                             (parse (second (s-exp->list binding)))))
                     (s-exp->list (second l)))
                (parse (third l)))]
@@ -113,14 +113,14 @@
 
              ;; Variable identifiers
              [else (idC (s-exp->symbol (first l)))]
+             )
            )
-       )
-     )]
+       )]
 
     ;; Default case for variables
     [else (idC (s-exp->symbol s))]
+    )
   )
-)
 
 
 (define (eval-env (e : Expr) (env : Env)) : Value
@@ -169,36 +169,36 @@
                (if (zero? n)
                    (eval-env e2 env)
                    (let ([v (eval-env (natrecC (valC (numV (- n 1))) e2 x y e3) env)])
-                      (eval-env (letC (list (pair x (valC (numV (- n 1))))
-                                            (pair y (valC v)))
-                                        e3) env))))]
+                     (eval-env (letC (list (pair x (valC (numV (- n 1))))
+                                           (pair y (valC v)))
+                                     e3) env))))]
 
     ;; Handle listrec
     [listrecC (e1 e2 hd restS res e3)
-     (let ([v (listV-vs (eval-env e1 env))])
-       (if (empty? v)
-           (eval-env e2 env)
-           (let ([vrec (eval-env (listrecC (valC (listV (rest v))) e2 hd restS res e3) env)])
-             (eval-env (letC (list (pair hd (valC (first v)))
-                                   (pair restS (valC (listV (rest v))))
-                                   (pair res (valC vrec)))
-                              e3) env))))]
+              (let ([v (listV-vs (eval-env e1 env))])
+                (if (empty? v)
+                    (eval-env e2 env)
+                    (let ([vrec (eval-env (listrecC (valC (listV (rest v))) e2 hd restS res e3) env)])
+                      (eval-env (letC (list (pair hd (valC (first v)))
+                                            (pair restS (valC (listV (rest v))))
+                                            (pair res (valC vrec)))
+                                      e3) env))))]
 
     ;; Handle let
     [letC (bindings e)
           (let* ([values (map (lambda (binding) (eval-env (snd binding) env)) bindings)]
-                [new-env (create-new-env values bindings env)])
+                 [new-env (create-new-env values bindings env)])
             (eval-env e new-env))]
 
     ;; Handle let*
     [let*C (bindings e)
-          (let ([new-env (foldl (lambda (binding env)
-                                  (let ([var (fst binding)]
-                                        [value (eval-env (snd binding) env)])
-                                    (extend-env (bind var value env) env)))
-                                env
-                                bindings)])
-            (eval-env e new-env))]
+           (let ([new-env (foldl (lambda (binding env)
+                                   (let ([var (fst binding)]
+                                         [value (eval-env (snd binding) env)])
+                                     (extend-env (bind var value env) env)))
+                                 env
+                                 bindings)])
+             (eval-env e new-env))]
 
     ;; Handle unpack
     ; (unpack (x1 x2 ... xn) e1 e2)
@@ -209,9 +209,13 @@
     ;; Handle unpack
     [unpackC (vars e1 e2) (numV 0)]
 
+
+
+
+
     ;; Handle variable identifiers
     [idC (x) (lookup x env)]
- )
+    )
   )
 
 

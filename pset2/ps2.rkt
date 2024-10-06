@@ -14,7 +14,7 @@
 
 
 (define-type Binding
-  [bind (name : symbol) (val : Value)])
+  [bind (name : symbol) (val : Value) (env : Env)])
 
 (define-type-alias Env (listof Binding))
 (define empty-env empty)
@@ -184,7 +184,7 @@
           (let ([new-env (foldl (lambda (binding env)
                                   (let ([var (fst binding)]
                                         [value (eval-env (snd binding) env)])
-                                    (extend-env (bind var value) env)))
+                                    (extend-env (bind var value env) env)))
                                 env
                                 bindings)])
             (eval-env e new-env))]
@@ -194,7 +194,7 @@
           (let ([new-env (foldl (lambda (binding env)
                                   (let ([var (fst binding)]
                                         [value (eval-env (snd binding) env)])
-                                    (extend-env (bind var value) env)))
+                                    (extend-env (bind var value env) env)))
                                 env
                                 bindings)])
             (eval-env e new-env))]
@@ -206,12 +206,9 @@
     ; Evaluates e1, which can be assumed to yield a list l of the form (v1 v2 ... vn)
     ; Then returns the result of evaluating e2 with x1 bound to v1, x2 bound to v2, ..., xn bound to vn.
     ; It is assumed that the list l has the same length as the length of the 'vars' argument.
-    [unpackC (vars e1 e2)
-        (let ([l (listV-vs (eval-env e1 env))])
-          (eval-env e2 (foldl (lambda (binding env)
-                                (let ([var (fst binding)]
-                                      [value (snd binding)])
-                                  (extend-env (bind var value) env))) env list 
+    ;; Handle unpack
+    [unpackC (vars e1 e2) (numV 0)]
+
 
     ;; Handle variable identifiers
     [idC (x) (lookup x env)]

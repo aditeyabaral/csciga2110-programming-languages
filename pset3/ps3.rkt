@@ -261,20 +261,18 @@
                  [else (error 'setboxC "Expected boxV")]))]
 
     [vectorC (e1)
-             (letrec ([eval-vec
-                       (lambda (elements acc current-sto)
-                         (if (empty? elements)
-                             (let* ([loc (new-loc)]
-                                    [vec (vectorV (reverse acc))]
-                                    [cell (cell loc vec)]
-                                    [new-sto (override-store cell current-sto)])
-                               (res (boxV loc) new-sto))
-                             (type-case Result (eval-env env current-sto (first elements))
-                               [res (val new-sto)
-                                    (eval-vec (rest elements)
-                                              (cons val acc)
-                                              new-sto)])))])
-               (eval-vec e1 empty sto))]
+             (letrec ([loop (lambda (es current-sto acc)
+                              (if (empty? es)
+                                  (let* ([loc (new-loc)]
+                                         [vec (vectorV (reverse acc))]
+                                         [cell (cell loc vec)]
+                                         [new-sto (override-store cell current-sto)])
+                                    (res (boxV loc) new-sto))
+                                  (let* ([result (eval-env env current-sto (first es))]
+                                         [new-val (res-v result)]
+                                         [new-sto (res-s result)])
+                                    (loop (rest es) new-sto (cons new-val acc)))))])
+               (loop e1 sto empty))]
 
     [vector-lengthC (e)
                     (let* ([result (eval-env env sto e)]
@@ -288,66 +286,117 @@
                         [else (error 'eval-env "Not vref")]))]
 
     [vector-refC (e1 e2)
-                 (type-case Result (eval-env env sto e1)
-                   [res (v-ref sto-1)
-                        (type-case Result (eval-env env sto-1 e2)
-                          [res (n sto-2)
-                               (type-case Value n
-                                 [numV (index)
-                                       (let* ([elements (store->vector v-ref sto-2)]
-                                              [offset (if (boxV? v-ref)
-                                                          0
-                                                          (subvectorV-offset v-ref))])
-                                         (res (list-ref elements (+ offset index)) sto-2))]
-                                 [else (error 'eval-env "not a number")])])])]
+                 (let* ([result1 (eval-env env sto e1)]
+                        [v1 (res-v result1)]
+                        [s1 (res-s result1)]
+                        [result2 (eval-env env s1 e2)]
+                        [v2 (res-v result2)]
+                        [s2 (res-s result2)])
+                   (type-case Value v1
+                     [boxV (loc)
+                           (type-case Value v2
+                             [numV (index)
+                                   (let* ([elements (store->vector v1 s2)]
+                                          [offset (if (boxV? v1)
+                                                      0
+                                                      (subvectorV-offset v1))])
+                                     (res (list-ref elements (+ offset index)) s2))]
+                             [else (error 'eval-env "Expected number")])]
+                     [subvectorV (orig-loc offset len)
+                                 (type-case Value (fetch orig-loc s2)
+                                   [vectorV (elements)
+                                            (type-case Value v2
+                                              [numV (index)
+                                                    (if (and (>= index 0)
+                                                             (< index len))
+                                                        (res (list-ref elements (+ offset index)) s2)
+                                                        (error 'eval-env "Index out of bounds"))]
+                                              [else (error 'eval-env "Expected number")])]
+                                   [else (error 'eval-env "Expected vectorV")])]
+                     [else (error 'eval-env "Expected boxV or subvectorV")]))]
+
     [vector-set!C (e1 e2 e3)
-                  (type-case Result (eval-env env sto e1)
-                    [res (v-ref sto-1)
-                         (let* ([elements (store->vector v-ref sto-1)]
-                                [loc (if (boxV? v-ref)
-                                         (boxV-l v-ref)
-                                         (subvectorV-original v-ref))]
-                                [offset (if (boxV? v-ref)
-                                            0
-                                            (subvectorV-offset v-ref))])
-                           (store->eval-idx-update env sto-1 e2 e3 elements loc offset))])]
+                  (let* ([result1 (eval-env env sto e1)]
+                         [v1 (res-v result1)]
+                         [s1 (res-s result1)]
+                         [result2 (eval-env env s1 e2)]
+                         [v2 (res-v result2)]
+                         [s2 (res-s result2)]
+                         [result3 (eval-env env s2 e3)]
+                         [v3 (res-v result3)]
+                         [s3 (res-s result3)])
+                    (type-case Value v1
+                      [boxV (loc)
+                            (type-case Value v2
+                              [numV (index)
+                                    (let* ([elements (store->vector v1 s3)]
+                                           [offset (if (boxV? v1)
+                                                       0
+                                                       (subvectorV-offset v1))])
+                                      (let* ([new-elements (list->replace elements (+ offset index) v3)]
+                                             [new-store (override-store (cell loc (vectorV new-elements)) s3)])
+                                        (res v3 new-store)))]
+                              [else (error 'eval-env "Expected number")])]
+                      [subvectorV (orig-loc offset len)
+                                  (type-case Value (fetch orig-loc s3)
+                                    [vectorV (elements)
+                                             (type-case Value v2
+                                               [numV (index)
+                                                     (if (and (>= index 0)
+                                                              (< index len))
+                                                         (let* ([new-elements (list->replace elements (+ offset index) v3)]
+                                                                [new-store (override-store (cell orig-loc (vectorV new-elements)) s3)])
+                                                           (res v3 new-store))
+                                                         (error 'eval-env "Index out of bounds"))]
+                                               [else (error 'eval-env "Expected number")])]
+                                    [else (error 'eval-env "Expected vectorV")])]
+                      [else (error 'eval-env "Expected boxV or subvectorV")]))]
+
     [vector-makeC (e1 e2)
-                  (type-case Result (eval-env env sto e1)
-                    [res (n sto-1)
-                         (type-case Value n
-                           [numV (length)
-                                 (if (>= length 0)
-                                     (type-case Result (eval-env env sto-1 e2)
-                                       [res (v sto-2)
-                                            (let* ([loc (new-loc)]
-                                                   [vec (vectorV (build-list length (lambda (_) v)))]
-                                                   [new-sto (override-store (cell loc vec) sto-2)])
-                                              (res (boxV loc) new-sto))])
-                                     (error 'eval-env "length should be positive"))]
-                           [else (error 'eval-env "not a numberr")])])]
+                  (let* ([result1 (eval-env env sto e1)]
+                         [v1 (res-v result1)]
+                         [s1 (res-s result1)]
+                         [result2 (eval-env env s1 e2)]
+                         [v2 (res-v result2)]
+                         [s2 (res-s result2)])
+                    (type-case Value v1
+                      [numV (length)
+                            (if (>= length 0)
+                                (let* ([loc (new-loc)]
+                                       [vec (vectorV (build-list length (lambda (_) v2)))]
+                                       [new-sto (override-store (cell loc vec) s2)])
+                                  (res (boxV loc) new-sto))
+                                (error 'eval-env "length should be positive"))]
+                      [else (error 'eval-env "not a numberr")]))]
+
     [subvectorC (e offset len)
-                (type-case Result (eval-env env sto e)
-                  [res (v-ref sto-1)
-                       (let ([elements (store->vector v-ref sto-1)])
-                         (type-case Result (eval-env env sto-1 offset)
-                           [res (n sto-2)
-                                (type-case Value n
-                                  [numV (start)
-                                        (type-case Result (eval-env env sto-2 len)
-                                          [res (l sto-3)
-                                               (type-case Value l
-                                                 [numV (sublen)
-                                                       (if (and (>= start 0)
-                                                                (<= start (length elements))
-                                                                (>= sublen 0)
-                                                                (<= (+ start sublen) (length elements)))
-                                                           (res (subvectorV (if (boxV? v-ref)
-                                                                                (boxV-l v-ref)
-                                                                                (subvectorV-original v-ref))
-                                                                            start sublen) sto-3)
-                                                           (error 'eval-env "invaild bound"))]
-                                                 [else (error 'eval-env "expected number")])])]
-                                  [else (error 'eval-env "expected number")])]))])]
+                (let* ([result1 (eval-env env sto e)]
+                       [v1 (res-v result1)]
+                       [s1 (res-s result1)]
+                       [result2 (eval-env env s1 offset)]
+                       [v2 (res-v result2)]
+                       [s2 (res-s result2)]
+                       [result3 (eval-env env s2 len)]
+                       [v3 (res-v result3)]
+                       [s3 (res-s result3)])
+                  (type-case Value v1
+                    [boxV (loc)
+                          (type-case Value v2
+                            [numV (start)
+                                  (type-case Value v3
+                                    [numV (sublen)
+                                          (let* ([elements (store->vector v1 s3)])
+                                            (if (and (>= start 0)
+                                                     (<= start (length elements))
+                                                     (>= sublen 0)
+                                                     (<= (+ start sublen) (length elements)))
+                                                (res (subvectorV loc start sublen) s3)
+                                                (error 'eval-env "invaild bound")))]
+                                    [else (error 'eval-env "expected number")])]
+                            [else (error 'eval-env "expected number")])]
+                    [subvectorV (orig-loc offset sublen)
+                                (res (subvectorV orig-loc (+ offset offset) sublen) s3)]
+                    [else (error 'eval-env "expected boxV or subvectorV")]))]
 
     [beginC (es)
             (letrec ([loop (lambda (es current-sto last-result)

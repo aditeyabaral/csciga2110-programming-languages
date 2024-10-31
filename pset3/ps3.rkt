@@ -307,10 +307,7 @@
                                    [vectorV (elements)
                                             (type-case Value v2
                                               [numV (index)
-                                                    (if (and (>= index 0)
-                                                             (< index len))
-                                                        (res (list-ref elements (+ offset index)) s2)
-                                                        (error 'eval-env "Index out of bounds"))]
+                                                    (res (list-ref elements (+ offset index)) s2)]
                                               [else (error 'eval-env "Expected number")])]
                                    [else (error 'eval-env "Expected vectorV")])]
                      [else (error 'eval-env "Expected boxV or subvectorV")]))]
@@ -342,12 +339,10 @@
                                     [vectorV (elements)
                                              (type-case Value v2
                                                [numV (index)
-                                                     (if (and (>= index 0)
-                                                              (< index len))
-                                                         (let* ([new-elements (list->replace elements (+ offset index) v3)]
-                                                                [new-store (override-store (cell orig-loc (vectorV new-elements)) s3)])
-                                                           (res v3 new-store))
-                                                         (error 'eval-env "Index out of bounds"))]
+                                                     (let* ([new-elements (list->replace elements (+ offset index) v3)]
+                                                            [new-store (override-store (cell orig-loc (vectorV new-elements)) s3)])
+                                                       (res v3 new-store))
+                                                     ]
                                                [else (error 'eval-env "Expected number")])]
                                     [else (error 'eval-env "Expected vectorV")])]
                       [else (error 'eval-env "Expected boxV or subvectorV")]))]
@@ -361,12 +356,10 @@
                          [s2 (res-s result2)])
                     (type-case Value v1
                       [numV (length)
-                            (if (>= length 0)
-                                (let* ([loc (new-loc)]
-                                       [vec (vectorV (build-list length (lambda (_) v2)))]
-                                       [new-sto (override-store (cell loc vec) s2)])
-                                  (res (boxV loc) new-sto))
-                                (error 'eval-env "length should be positive"))]
+                            (let* ([loc (new-loc)]
+                                   [vec (vectorV (build-list length (lambda (_) v2)))]
+                                   [new-sto (override-store (cell loc vec) s2)])
+                              (res (boxV loc) new-sto))]
                       [else (error 'eval-env "not a numberr")]))]
 
     [subvectorC (e offset len)
@@ -386,12 +379,7 @@
                                   (type-case Value v3
                                     [numV (sublen)
                                           (let* ([elements (store->vector v1 s3)])
-                                            (if (and (>= start 0)
-                                                     (<= start (length elements))
-                                                     (>= sublen 0)
-                                                     (<= (+ start sublen) (length elements)))
-                                                (res (subvectorV loc start sublen) s3)
-                                                (error 'eval-env "invaild bound")))]
+                                            (res (subvectorV loc start sublen) s3))]
                                     [else (error 'eval-env "expected number")])]
                             [else (error 'eval-env "expected number")])]
                     [subvectorV (orig-loc offset sublen)

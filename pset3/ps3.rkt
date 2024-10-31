@@ -409,14 +409,16 @@
               (loop es sto (boolV #f)))]
 
     [transactC (e)
-               (type-case Result (eval-env env sto e)
-                 [res (v sto-1)
-                      (type-case Value v
-                        [pairV (commit? result)
-                               (type-case Value commit?
-                                 [boolV (b) (res result (if b sto-1 sto))]
-                                 [else (error 'transactC "expected bool")])]
-                        [else (error 'transactC "expected pair")])])]
+               (let* ([result (eval-env env sto e)]
+                      [v (res-v result)]
+                      [s1 (res-s result)])
+                 (type-case Value v
+                   [pairV (commit? result)
+                          (type-case Value commit?
+                            [boolV (b) (res result (if b s1 sto))]
+                            [else (error 'transactC "expected bool")]
+                            )]
+                   [else (error 'transactC "expected pair")]))]
     ))
 
 

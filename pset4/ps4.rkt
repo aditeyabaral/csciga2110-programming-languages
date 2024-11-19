@@ -116,7 +116,10 @@
           (let ([method-opt (method-assoc name methods)])
             (type-case (optionof (symbol * Method)) method-opt
               [some (method) (some (snd method))]
-              [none () (none)]))]
+              [none ()
+                    (type-case (optionof Value) delegate
+                      [some (delegate-expr) (find-method delegate-expr name)]
+                      [none () (none)])]))]
     [else (error 'find-method "Expected objV")]))
 
 (define (find-location (o : Value) (name : symbol)) : (optionof Location)

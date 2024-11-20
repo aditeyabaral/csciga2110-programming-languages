@@ -37,14 +37,6 @@
 (define empty-env empty)
 (define extend-env cons)
 
-(define (lookup (x : symbol) (env : Env)) : Value
-  (cond
-    [(cons? env)
-     (if (equal? (bind-name (first env)) x)
-         (bind-val (first env))
-         (lookup x (rest env)))]
-    [else (error 'lookup "No binding found")]))
-
 (define-type Result
   [res (v : Value) (s : Store)])
 
@@ -55,6 +47,20 @@
 (define-type-alias Store (listof Storage))
 (define empty-store empty)
 (define override-store cons)
+
+(define-type EvaluatedFields
+  [evaluated-fields (fields : (listof (symbol * Location))) (sto : Store)])
+
+(define-type EvaluatedArguments
+  [evaluated-arguments (args : (listof Value)) (sto : Store)])
+
+(define (lookup (x : symbol) (env : Env)) : Value
+  (cond
+    [(cons? env)
+     (if (equal? (bind-name (first env)) x)
+         (bind-val (first env))
+         (lookup x (rest env)))]
+    [else (error 'lookup "No binding found")]))
 
 (define (fetch (l : Location) (sto : Store)) : Value
   (cond
@@ -79,11 +85,7 @@
   (let ([counter (box 0)])
     (lambda ()
       (let ([ctr (unbox counter)])
-        (begin (set-box! counter (+ 1 ctr))
-               ctr)))))
-
-(define-type EvaluatedFields
-  [evaluated-fields (fields : (listof (symbol * Location))) (sto : Store)])
+        (begin (set-box! counter (+ 1 ctr)) ctr)))))
 
 (define (evaluate-fields(fields : (listof (symbol * Expr))) (env : Env) (sto : Store)) :  EvaluatedFields
   (if (empty? fields) (evaluated-fields empty sto)
@@ -93,16 +95,16 @@
              [result (eval-env env sto expr)]
              [value (res-v result)]
              [new-sto (res-s result)]
-             [loc (create-location)]
-             [combined-sto (override-store (cell loc value) new-sto)]
+             [location (create-location)]
+             [combined-sto (override-store (cell location value) new-sto)]
              [rest-result (evaluate-fields (rest fields) env combined-sto)]
              [rest-fields (evaluated-fields-fields rest-result)]
              [final-sto (evaluated-fields-sto rest-result)])
-        (evaluated-fields (cons (pair name loc) rest-fields) final-sto)))
+        (evaluated-fields (cons (pair name location) rest-fields) final-sto)))
   )
 
 (define (build-methods (methods : (listof MethodDecl)) (env : Env)) : (listof (symbol * Method))
-  (map (lambda (md)(pair (method-decl-name md) (method md env))) methods))
+  (map (lambda (md) (pair (method-decl-name md) (method md env))) methods))
 
 (define (method-assoc (name : symbol) (methods : (listof (symbol * Method)))) : (optionof (symbol * Method))
   (cond
@@ -127,7 +129,7 @@
     [objV (delegate fields methods)
           (let ([location-opt (find-field name fields)])
             (type-case (optionof Location) location-opt
-              [some (loc) (some loc)]
+              [some (location) (some location)]
               [none ()
                     (type-case (optionof Value) delegate
                       [some (delegate-expr) (find-location delegate-expr name)]
@@ -144,9 +146,6 @@
   (if (or (empty? symbols) (empty? values)) empty
       (cons (f (first symbols) (first values))
             (bind-function f (rest symbols) (rest values)))))
-
-(define-type EvaluatedArguments
-  [evaluated-arguments (args : (listof Value)) (sto : Store)])
 
 (define (evaluate-arguments (args : (listof Expr)) (env : Env) (sto : Store)) : EvaluatedArguments
   (if (empty? args) (evaluated-arguments empty sto)
@@ -271,58 +270,55 @@
     [objectC (delegate fields methods)
              (type-case (optionof Expr) delegate
                [none ()
-                     (let* ([field-result (evaluate-fields fields env sto)]
-                            [fields-mapping (evaluated-fields-fields field-result)]
-                            [sto1 (evaluated-fields-sto field-result)]
-                            [methods-mapping (build-methods methods env)]
-                            [obj (objV (none) fields-mapping methods-mapping)])
-                       (res obj sto1))]
+                     (let* ([field-evals (evaluate-fields fields env sto)]
+                            [field-values (evaluated-fields-fields field-evals)]
+                            [new-sto (evaluated-fields-sto field-evals)]
+                            [built-methods (build-methods methods env)]
+                            [obj (objV (none) field-values built-methods)])
+                       (res obj new-sto))]
                [some (delegate-expr)
                      (let* ([result (eval-env env sto delegate-expr)]
-                            [delegateV (res-v result)]
-                            [sto1 (res-s result)])
-                       (type-case Value delegateV
-                         [objV (d-fields d-methods d-delegate)
-                               (let* ([field-res (evaluate-fields fields env sto1)]
-                                      [fields-mapping (evaluated-fields-fields field-res)]
-                                      [sto2 (evaluated-fields-sto field-res)]
-                                      [methods-mapping (build-methods methods env)]
-                                      [obj (objV (some delegateV) fields-mapping methods-mapping)])
-                                 (res obj sto2))]
-                         [else (error 'objectC "Delegate is not an objectV")]))])]
+                            [delegate-value (res-v result)]
+                            [new-sto (res-s result)])
+                       (type-case Value delegate-value
+                         [objV (delegate-fields delegate-methods delegate-delegate)
+                               (let* ([field-evals (evaluate-fields fields env new-sto)]
+                                      [field-values(evaluated-fields-fields field-evals)]
+                                      [final-sto (evaluated-fields-sto field-evals)]
+                                      [built-methods (build-methods methods env)]
+                                      [obj (objV (some delegate-value) field-values built-methods)])
+                                 (res obj final-sto))]
+                         [else (error 'objectC "delegate is not an objV")]))])]
 
     [msgC (o method args)
           (type-case Result (eval-env env sto o)
-            [res (obj sto1)
+            [res (obj initial-sto)
                  (type-case Value obj
                    [objV (delegate fields methods)
-                         (let* ([arg-result (evaluate-arguments args env sto1)]
-                                [arg-values (evaluated-arguments-args arg-result)]
-                                [sto2 (evaluated-arguments-sto arg-result)]
+                         (let* ([arg-evals (evaluate-arguments args env initial-sto)]
+                                [arg-values (evaluated-arguments-args arg-evals)]
+                                [new-sto (evaluated-arguments-sto arg-evals)]
                                 [method-opt (find-method obj method)])
                            (type-case (optionof Method) method-opt
                              [some (method)
                                    (let* ([method-decl (method-md method)]
-                                          [param-names (method-decl-args method-decl)] ; includes self
-                                          [expected-arg-count (length param-names)]
-                                          [actual-arg-count (+ 1 (length args))]) ; self + args
-                                     (if (not (= expected-arg-count actual-arg-count))
-                                         (error 'msgC "Incorrect number of arguments")
-                                         (let* ([arg-bindings (bind-function bind param-names (cons obj arg-values))]
-                                                [method-env (append arg-bindings (method-env method))])
-                                           ;; Evaluate body
-                                           (eval-env method-env sto2 (method-decl-body method-decl)))))]
+                                          [declared-args (method-decl-args method-decl)]
+                                          [expected-args (length declared-args)]
+                                          [actual-args(+ 1 (length args))]
+                                          [bindings (bind-function bind declared-args (cons obj arg-values))]
+                                          [updated-env (append bindings (method-env method))])
+                                     (eval-env updated-env new-sto (method-decl-body method-decl)))]
                              [none () (error 'msgC (string-append "Method not found: " (symbol->string method)))]))]
                    [else (error 'msgC "Expected objectV")])])]
 
     [get-fieldC (name)
                 (let ([o (lookup 'self env)])
-                  (let ([location (find-location o name)])
+                  (let ([location-opt (find-location o name)])
                     (cond
-                      [(none? location) (error 'get-fieldC (string-append "Field not found: " (symbol->string name)))]
-                      [(some? location)
-                       (type-case (optionof Location) location
-                         [some (loc) (res (fetch loc sto) sto)]
+                      [(none? location-opt) (error 'get-fieldC (string-append "Field not found: " (symbol->string name)))]
+                      [(some? location-opt)
+                       (type-case (optionof Location) location-opt
+                         [some (location) (res (fetch location sto) sto)]
                          [none () (error 'get-fieldC "Unexpected none in location")])]
                       [else (error 'get-fieldC "Unexpected none in location")])))]
 
@@ -330,12 +326,12 @@
                  (type-case Result (eval-env env sto e)
                    [res (value sto)
                         (let ([o (lookup 'self env)])
-                          (let ([location (find-location o name)])
+                          (let ([location-opt (find-location o name)])
                             (cond
-                              [(none? location) (error 'set-field!C (string-append "Field not found: " (symbol->string name)))]
-                              [(some? location)
-                               (type-case (optionof Location) location
-                                 [some (loc) (res value (override-store (cell loc value) sto))]
+                              [(none? location-opt) (error 'set-field!C (string-append "Field not found: " (symbol->string name)))]
+                              [(some? location-opt)
+                               (type-case (optionof Location) location-opt
+                                 [some (location) (res value (override-store (cell location value) sto))]
                                  [none () (error 'set-field!C "Unexpected none in location")])]
                               [else (error 'set-field!C "Unexpected none in location")])
                             ))])]

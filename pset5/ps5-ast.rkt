@@ -12,7 +12,7 @@
   ; (voidC) : voidT
   [voidC]
 
-  ; (boolC b) : boolT 
+  ; (boolC b) : boolT
   [boolC (b : boolean)]
 
   ; if e1 : t1 and e2 : t2, then (pairC e1 e2) : (pairT t1 t2)
